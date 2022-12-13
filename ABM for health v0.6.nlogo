@@ -662,14 +662,12 @@ end
 ; END UPDATE_COUNTER
 
 to test
-  let indice 1
-  while [indice < 6] [
-    set_environment
-    loop [
-      if (n_ticks > ticks) [ go ]
-    ]
-    set indice indice + 1
+
+  set_environment
+  loop [
+    if (n_ticks > ticks) [ go ]
   ]
+
 
   ;setup
   ;load_gis
