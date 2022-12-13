@@ -663,12 +663,11 @@ end
 
 to test
 
-    set_environment
-    loop [
-      if (n_ticks > ticks) [ go ]
-    ]
-    set indice indice + 1
+  set_environment
+  loop [
+    if (n_ticks > ticks) [ go ]
   ]
+
 
   ;setup
   ;load_gis

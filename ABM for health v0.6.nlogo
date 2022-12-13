@@ -665,7 +665,7 @@ to test
 
   set_environment
   loop [
-    if (n_ticks > ticks) [ go ]
+    ifelse (n_ticks > ticks) [ go ] [ stop ]
   ]
 
 
