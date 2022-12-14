@@ -232,11 +232,6 @@ to place_pats
       set outcome_beds_intra table:get picked_patient "outcome_beds_intra"
 
       ; liability level: between 0 (the patient is not inclined to move for access to hospital) and 1 (the patient is willing to move for accessing to hospital)
-      ; note that income and education refer specifically to the patient while north and interventions depend on the municipality where the patient live and do not vary across patients that live in the same municipality
-      ; set liability (0.569118071 - 0.041799713 * north - 2.4902E-05 * income + 0.289572964 * education - 2.119562237 * outcome_intervention + 1.715933936 * outcome_return - 0.136317186 * outcome_closest)
-      ; set liability (0.472310529 - 0.053405914 * north - 2.34388E-05 * income + 0.48405523 * education - 3.268324343 * outcome_intervention + 2.226367844 * outcome_return - 0.123242158 * outcome_closest)
-      ; set liability (0.501856384 - 9.52009E-06 * income - 5.561400038 * outcome_intervention_intra + 2.041424457 * outcome_return_intra)
-      ; set liability (0.6345723 + 0.0004382 * waiting - 0.0068927 * satisfaction - -0.0004870 * outcome_intervention_intra + 0.3465770 * outcome_return_intra - 0.0268745 * outcome_beds_intra)
       set liability (0.5751594 + 0.0005169 * waiting - 0.0060547 * satisfaction - 0.0006994 * outcome_intervention_intra + 0.5006558 * outcome_return_intra - 0.0029291 * outcome_beds_intra)
 
       ; considering that the liability is computed based on a regression model it can be lower than 0 or higher than 1. in both cases the value is normalized between 0 an 1
