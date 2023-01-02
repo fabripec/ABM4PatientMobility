@@ -375,7 +375,6 @@ to-report get_target [idp]
   ask houses [ ; all hospital variables directly accessible. Agent variables must be accessed under myself (see same_region as example)
     let dist table:get distances id_hospital ; get the distance
     if dist >= 0 [
-
       let same_region [ my_region ] of myself = region ; hospital and patient are from the same region
       let p_weight get_weight dist dev_dist ; comput the weight of the hospital (proportional to the patient-to-hospital distance)
                                             ; if the hospital is situated in the same region of the patient, the patient can access it even if it is saturated
