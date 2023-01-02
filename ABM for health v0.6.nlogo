@@ -372,36 +372,24 @@ to-report get_target [idp]
   let max_dist max table:values distances
   let dev_dist standard-deviation table:values distances
   ; for each hospital code
-  foreach keys [
-    key -> let dist table:get distances key ; get the distance
+  ask houses [ ; all hospital variables directly accessible. Agent variables must be accessed under myself (see same_region as example)
+    let dist table:get distances id_hospital ; get the distance
     if dist >= 0 [
-      let my_hospital one-of houses with [id_hospital = key] ; get the hospital with the specific key
-      ; if the hospital exists (this control may be removed)
-      if my_hospital != nobody [
-        ; load and set the hospital information and variables
-        let h_capacity [capacity] of my_hospital
-        let h_region [region] of my_hospital
-        let h_intervention [intervention] of my_hospital
-        let h_return [return] of my_hospital
-        let h_n_return [n_return] of my_hospital
-        let h_Rj [Rj] of my_hospital
-        let h_beds [beds] of my_hospital
-        let same_region my_region = h_region ; hospital and patient are from the same region
-        let p_weight get_weight dist dev_dist ; comput the weight of the hospital (proportional to the patient-to-hospital distance)
-        ; if the hospital is situated in the same region of the patient, the patient can access it even if it is saturated
-        ifelse same_region = TRUE [
-          let weight (h_intervention * p_weight)
-          table:put weight_list_intra key weight
+      let same_region [ my_region ] of myself = region ; hospital and patient are from the same region
+      let p_weight get_weight dist dev_dist ; comput the weight of the hospital (proportional to the patient-to-hospital distance)
+                                            ; if the hospital is situated in the same region of the patient, the patient can access it even if it is saturated
+      ifelse same_region = TRUE [
+        let weight (intervention * p_weight)
+        table:put weight_list_intra id_hospital weight
+      ] [
+        ; if the hospital does not belong in the same region the weight is computed considering (or not) the capacity
+        ifelse (manage_capacity = false) [
+          let weight (intervention * p_weight)
+          table:put weight_list_extra id_hospital weight
         ] [
-          ; if the hospital does not belong in the same region the weight is computed considering (or not) the capacity
-          ifelse (manage_capacity = false) [
-            let weight (h_intervention * p_weight)
-            table:put weight_list_extra key weight
-          ] [
-            if (h_capacity > 0) [
-              let weight (h_intervention * p_weight)
-              table:put weight_list_extra key weight
-            ]
+          if (capacity > 0) [
+            let weight (intervention * p_weight)
+            table:put weight_list_extra id_hospital weight
           ]
         ]
       ]
@@ -939,6 +927,23 @@ manage_capacity
 0
 1
 -1000
+
+BUTTON
+143
+286
+215
+322
+go once
+go
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
