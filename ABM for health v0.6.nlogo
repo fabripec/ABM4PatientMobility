@@ -270,13 +270,12 @@ to move_pats
     ]
     ask patient_to_move [
       ; select the hospital calling the GET_TARGET function with that returns the code of the hospital choosed by the patient
-      let choosed_table get_target id_patient
-      let choosed table:get choosed_table 0
+      let selected_h get_target id_patient
       ; just a control that the hospital exists (to be peaceful!)
-      ifelse choosed != -1 [
+      ifelse selected_h != -1 [
         ; find the patch and place the patient over it
         ; note that the code of the hospital coincides with the code of the municipality where the hospital belongs
-        set target one-of houses with [id_hospital = choosed]
+        set target one-of houses with [id_hospital = selected_h]
         move-to target
         ; removes one place from the capacity of the hospital
         ask target [
@@ -290,13 +289,15 @@ to move_pats
         ]
         set color black + 6 ; the cared patient is moved and colored in black
         ; save the information on the CSV file
-        file-print (word ticks "|" id_municipality "|" region "|" province "|" [region] of target "|" [province] of target "|" (region = [region] of target) "|" liability "|" waiting "|" satisfaction "|" outcome_intervention_intra "|" outcome_return_intra "|" outcome_beds_intra "|" (table:get choosed_table 0) "|" (table:get choosed_table 1) "|" (table:get choosed_table 2))
+        file-print (word ticks "|" id_municipality "|" region "|" province "|" [region] of target "|" [province] of target "|" (region = [region] of target) "|"
+          liability "|" waiting "|" satisfaction "|" outcome_intervention_intra "|" outcome_return_intra "|" outcome_beds_intra "|" selected_h )
         ; updates the counter for computing the mobility index and colouring the map
         update_counter province region [region] of target
         set cared TRUE ; the patient is set as cared/hospitalized
       ] [
         set cared TRUE ; the patient has not hospital to go trough is set as cared/hospitalized
-        file-print (word ticks "|" id_municipality "|" region "|" province "|" "|" "|" "|" liability "|" waiting "|" satisfaction "|" outcome_intervention_intra "|" outcome_return_intra "|" outcome_beds_intra "|" (table:get choosed_table 0) "|" (table:get choosed_table 1) "|" (table:get choosed_table 2))
+        file-print (word ticks "|" id_municipality "|" region "|" province "|" "|" "|" "|" liability "|" waiting "|" satisfaction "|" outcome_intervention_intra "|"
+          outcome_return_intra "|" outcome_beds_intra "|" selected_h )
       ]
     ]
   ]
@@ -344,111 +345,37 @@ to set_environment
   ; go
 end
 
-; report the hospital choosed by the patient on the basis of the liability of the patient. In particular the algorithm:
-; 1) verify wheater the patient remains in his region or migrate for healthcare service. Note that the probability that the patient remains in his region or go outside is described by the liability index
-; 2) extract the hospital from the set of intra- or inter-regional hospitals. the extraction is based on the attactive of the hospital and the distance between the hospital and the patient
-; 3.1) the total accessibility of intra- hospitals is proportional to (1 - liability) that is the probability of the patient to stay in his/her region,
-; 3.2) the total accessibility of inter- hospital is proportional to (liability) that is the probability of the patient to go outside the region of residence
-; 4) the simulation extract the hospital among the intra- and the inter-regional hospitals, each one with a specific weight as calculated in points 3.1 and 3.2.
-; 5) not that each hospital may be saturated (capacity lower than or equal to 0). in this case its probability is 0 and cannot be accessed by the patient (unless the switch manage_capacity is set to FALSE in this case the capacity is infinitive)
+; this is a simpllified get_target function that ignores regions entirely. Patients just go to the best place available.
 to-report get_target [idp]
   ; load the patient information
   let my_patient one-of people with [cared = FALSE and id_patient = idp]
   let my_id_municipality [id_municipality] of my_patient
   let my_region [region] of my_patient
-  let my_liability [liability] of my_patient
-  let my_waiting [waiting] of my_patient
-  let my_satisfaction [satisfaction] of my_patient
-  ; initialize and set the relevant variables
-  let weight_values table:make
-  table:put weight_values 0 0
-  table:put weight_values 1 0
-  table:put weight_values 2 0
-  let weight_list_intra table:make ; list of weigths considering the intra-regional hospitals
   let weight_list_extra table:make ; list of weigths considering the extra-regional hospitals
   let distances table:get distance_table my_id_municipality ; list of distances between the patients and all the hospitals
   let keys table:keys distances ; list of hospital codes
   let min_dist min table:values distances
   let max_dist max table:values distances
   let dev_dist standard-deviation table:values distances
-  ; for each hospital code
+  ; for each hospital
   ask houses [ ; all hospital variables directly accessible. Agent variables must be accessed under myself (see same_region as example)
     let dist table:get distances id_hospital ; get the distance
-    if dist >= 0 [
-      let same_region [ my_region ] of myself = region ; hospital and patient are from the same region
-      let p_weight get_weight dist dev_dist ; comput the weight of the hospital (proportional to the patient-to-hospital distance)
-                                            ; if the hospital is situated in the same region of the patient, the patient can access it even if it is saturated
-      ifelse same_region = TRUE [
+    let p_weight get_weight dist dev_dist ; comput the weight of the hospital (proportional to the patient-to-hospital distance)
+    ifelse (manage_capacity = false) [
+      let weight (intervention * p_weight)
+      table:put weight_list_extra id_hospital weight
+    ] [
+      if (capacity > 0) [
         let weight (intervention * p_weight)
-        table:put weight_list_intra id_hospital weight
-      ] [
-        ; if the hospital does not belong in the same region the weight is computed considering (or not) the capacity
-        ifelse (manage_capacity = false) [
-          let weight (intervention * p_weight)
-          table:put weight_list_extra id_hospital weight
-        ] [
-          if (capacity > 0) [
-            let weight (intervention * p_weight)
-            table:put weight_list_extra id_hospital weight
-          ]
-        ]
+        table:put weight_list_extra id_hospital weight
       ]
     ]
   ]
-  ; each hospital placed in the same region (and in the other regions) of the patient has a specific weight that depend on the total accessibility and the liability
-  ; the summed probability of all the intra-regional hospitals is 1-liability while the summed probability of all the extra-regional hospitals is liability
-  ; in this way when an hospital is randomisely extracted the probability that the hospital is intra or extra regional depends on the liability index, while the
-  ; specific hospital depends on the distance and capacity
-  let weight_list table:make
-  if table:length weight_list_intra > 0 [
-    let sum_v sum table:values weight_list_intra
-    ifelse sum_v > 0 [
-      foreach (table:keys weight_list_intra) [
-        [k] -> let v table:get weight_list_intra k
-        let vn (v / sum_v) * (1 - my_liability) ; probability to stay
-        if vn < 0 [
-          set vn 0
-          output-print (word "vn: " my_region " - " k " - " v " - " sum_v " - " vn " - " my_liability)
-        ]
-        table:put weight_list_intra k vn
-        table:put weight_list k vn
-      ]
-      table:put weight_values 1 sum table:values weight_list_intra
-    ] [
-      table:put weight_values 1 0
-      output-print (word "intra: " my_region " - " sum_v " - " (1 - my_liability))
-    ]
+  let value -1
+  if table:length weight_list_extra != 0 [
+    set value item 0 rnd:weighted-one-of-list table:to-list weight_list_extra[[t] -> last t]
   ]
-  if table:length weight_list_extra > 0 [
-    let sum_v sum table:values weight_list_extra
-    ifelse sum_v > 0 [
-      foreach (table:keys weight_list_extra) [
-        [k] -> let v table:get weight_list_extra k
-        let vn (v / sum_v) * (my_liability) ; probability to go
-        if vn < 0 [
-          set vn 0
-          output-print (word "vn: " my_region " - " k " - " v " - " sum_v " - " vn " - " my_liability)
-        ]
-        table:put weight_list_extra k vn
-        table:put weight_list k vn
-      ]
-      table:put weight_values 2 sum table:values weight_list_extra
-    ] [
-      table:put weight_values 2 0
-      output-print (word "extra: " my_region " - " sum_v " - " (1 - my_liability))
-    ]
-  ]
-  ifelse table:length weight_list != 0 [
-    let value rnd:weighted-one-of-list table:to-list weight_list [[t] -> last t]
-    table:put weight_values 0 item 0 value
-  ] [
-    table:put weight_values 0 -1
-  ]
-  ; the variable reported by this function contains 3 information:
-  ; place 0) the hospital code where the patient are cared
-  ; place 1) the total amount of intra-regional probability
-  ; place 2) the total amount of inter-regional probability
-  report weight_values
+  report value
 end
 ; END GET_TARGET
 
