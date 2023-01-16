@@ -1,5 +1,5 @@
 ; extentions imported
-extensions [matrix gis csv array rnd table]
+extensions [matrix gis csv array rnd table bitmap]
 
 ; global variables
 ; italy-dataset: GIS dataset representing the shapefile
@@ -7,7 +7,7 @@ extensions [matrix gis csv array rnd table]
 ; municipality_table: stores all the information needed to describe the municipality
 ; population_table: lists of patients (and relevant information) to be involved in the simulation as extracted from the whole population
 ; comulative_data: it contains, for each region, the number of patients that move or remain in their region of residence to access the service
-globals [italy-dataset distance_table municipality_table population_table province_table comulative_data]
+globals [italy-dataset distance_table municipality_table population_table province_table comulative_data r_passive]
 
 ; create the two breeds: people and houses adopted to represent respectively patients and hospitals distributed over the territory
 breed [people person]
@@ -31,7 +31,7 @@ breed [houses house]
 ; intervention: number of interventions carried out by the hospital
 ; capacity: it is based on the number of interventions and the number of patients involved in the simulation to track the number of surgery procedures the hospital can host
 ; Rj: weighted hospital-to-population index that is proportional to the catchment population of the hospital based on the number of individuals and their distance
-houses-own [id_hospital region province n_return return intervention capacity Rj beds]
+houses-own [id_hospital region province n_return return intervention capacity Rj beds waiting satisfaction]
 
 ; information needed to define each patch of the map
 ; municipality_code: ISTAT code of the municipality that matches with the relevant patch
@@ -163,9 +163,10 @@ to place_hosps
         set Rj table:get info "Rj"
         set intervention table:get info "intervention"
         set beds table:get info "beds"
-
-        let values table:make
+        set waiting table:get table:get province_table province "waiting"
+        set satisfaction table:get table:get province_table province "satisfaction"
         set color green
+        set capacity 0
         let my_patch one-of (patches with [municipality_code = key])
         move-to my_patch
       ]
@@ -180,14 +181,13 @@ to place_pats
   reset-timer
   ; at the beginning the hospitals have their full capacity based on their number of intervention and number of patients involved in the simulation
   ; the hospital is colored in green
-  let total_intervention sum [intervention] of houses
+  let whole_intervention sum [intervention] of houses
   ask houses [
-    set capacity round ((intervention * n_patients) / total_intervention)
-    ; set capacity capacity * 1.05 ; add 5% of extra-capacity for each hospital
+    set capacity capacity + (((intervention * n_patients) / whole_intervention)) + 1
     set color green
   ]
 
-  output-print (word total_intervention " - " sum [capacity] of houses)
+  output-print (word whole_intervention " - " sum [capacity] of houses " - " sum [capacity] of houses with [region = "Abruzzo"] )
 
   ; output-print (word "total interv: " total_intervention " - " sum [capacity] of houses)
   ; removes all the patients from the world
@@ -231,7 +231,7 @@ to place_pats
       set outcome_return_intra table:get picked_patient "outcome_return_intra"
       set outcome_beds_intra table:get picked_patient "outcome_beds_intra"
 
-      ; liability level: between 0 (the patient is not inclined to move for access to hospital) and 1 (the patient is willing to move for accessing to hospital)
+      ; liability level: between 0 (the patient is not inclined to move outside his/her region of residence for accessing care) and 1 (the patient is willing to move)
       set liability (0.5751594 + 0.0005169 * waiting - 0.0060547 * satisfaction - 0.0006994 * outcome_intervention_intra + 0.5006558 * outcome_return_intra - 0.0029291 * outcome_beds_intra)
 
       ; considering that the liability is computed based on a regression model it can be lower than 0 or higher than 1. in both cases the value is normalized between 0 an 1
@@ -284,15 +284,12 @@ to move_pats
           if capacity <= 0 [
             set color red - 2
           ]
-          if capacity < 1 [
-            set color orange
-          ]
         ]
         set color black + 6 ; the cared patient is moved and colored in black
         ; save the information on the CSV file
         file-print (word ticks "|" id_municipality "|" region "|" province "|" [region] of target "|" [province] of target "|" (region = [region] of target) "|" liability "|" waiting "|" satisfaction "|" outcome_intervention_intra "|" outcome_return_intra "|" outcome_beds_intra "|" (table:get choosed_table 0) "|" (table:get choosed_table 1) "|" (table:get choosed_table 2))
         ; updates the counter for computing the mobility index and colouring the map
-        update_counter province region [region] of target
+        update_counter province region ([region] of target) ([province] of target)
         set cared TRUE ; the patient is set as cared/hospitalized
       ] [
         set cared TRUE ; the patient has not hospital to go trough is set as cared/hospitalized
@@ -313,6 +310,12 @@ to setup
   clear-output
   set comulative_data table:make ; it contains, for each region the number of patients that move/remain to access the service
   table:clear comulative_data
+
+  let image bitmap:import "database_ABM4healthcare/mobility_scale.png"
+  let height bitmap:height image
+  let width bitmap:width image
+  let legend bitmap:scaled image (width * 0.5) (height * 0.5)
+  bitmap:copy-to-drawing legend 600 40
 end
 ; END SETUP
 
@@ -322,10 +325,9 @@ end
 to go
   output-print (word "table: " table:length population_table " - pats: " n_patients " - n. ticks: " ticks)
   ifelse (n_ticks > ticks) [
-    place_hosps
-    output-print sum [capacity] of houses
+    output-print (word "capacity pre: " sum [capacity] of houses)
     place_pats
-    output-print sum [capacity] of houses
+    output-print (word "capacity post: " sum [capacity] of houses)
     move_pats
     polygon_color
     tick
@@ -341,6 +343,7 @@ to set_environment
   load_gis
   load_data
   load_population
+  place_hosps
   ; go
 end
 
@@ -372,37 +375,27 @@ to-report get_target [idp]
   let max_dist max table:values distances
   let dev_dist standard-deviation table:values distances
   ; for each hospital code
-  foreach keys [
-    key -> let dist table:get distances key ; get the distance
+  ask houses [ ; all hospital variables directly accessible. Agent variables must be accessed under myself (see same_region as example)
+    let dist table:get distances id_hospital ; get the distance
     if dist >= 0 [
-      let my_hospital one-of houses with [id_hospital = key] ; get the hospital with the specific key
-      ; if the hospital exists (this control may be removed)
-      if my_hospital != nobody [
-        ; load and set the hospital information and variables
-        let h_capacity [capacity] of my_hospital
-        let h_region [region] of my_hospital
-        let h_intervention [intervention] of my_hospital
-        let h_return [return] of my_hospital
-        let h_n_return [n_return] of my_hospital
-        let h_Rj [Rj] of my_hospital
-        let h_beds [beds] of my_hospital
-        let same_region my_region = h_region ; hospital and patient are from the same region
-        let p_weight get_weight dist dev_dist ; comput the weight of the hospital (proportional to the patient-to-hospital distance)
-        ; if the hospital is situated in the same region of the patient, the patient can access it even if it is saturated
-        ifelse same_region = TRUE [
-          let weight (h_intervention * p_weight)
-          table:put weight_list_intra key weight
-        ] [
-          ; if the hospital does not belong in the same region the weight is computed considering (or not) the capacity
-          ifelse (manage_capacity = false) [
-            let weight (h_intervention * p_weight)
-            table:put weight_list_extra key weight
+      let same_region [ my_region ] of myself = region ; hospital and patient are from the same region
+      let p_weight get_weight dist dev_dist
+      ; compute the weight of the hospital (proportional to the patient-to-hospital distance)
+      ; let weight (1 - (0.5751594 + 0.0005169 * s_waiting - 0.0060547 * s_satisfaction - 0.0006994 * intervention * p_weight * Rj + 0.5006558 * return * p_weight * Rj - 0.0029291 * beds * p_weight * Rj))
+      let weight intervention * p_weight
+      ifelse (manage_capacity = true) [
+        if (capacity > 0) [
+          ifelse same_region = TRUE [
+            table:put weight_list_intra id_hospital weight
           ] [
-            if (h_capacity > 0) [
-              let weight (h_intervention * p_weight)
-              table:put weight_list_extra key weight
-            ]
+            table:put weight_list_extra id_hospital weight
           ]
+        ]
+      ] [
+        ifelse same_region = TRUE [
+          table:put weight_list_intra id_hospital weight
+        ] [
+          table:put weight_list_extra id_hospital weight
         ]
       ]
     ]
@@ -412,7 +405,7 @@ to-report get_target [idp]
   ; in this way when an hospital is randomisely extracted the probability that the hospital is intra or extra regional depends on the liability index, while the
   ; specific hospital depends on the distance and capacity
   let weight_list table:make
-  if table:length weight_list_intra > 0 [
+  ifelse table:length weight_list_intra > 0 [
     let sum_v sum table:values weight_list_intra
     ifelse sum_v > 0 [
       foreach (table:keys weight_list_intra) [
@@ -430,8 +423,10 @@ to-report get_target [idp]
       table:put weight_values 1 0
       output-print (word "intra: " my_region " - " sum_v " - " (1 - my_liability))
     ]
+  ] [
+    table:put weight_values 1 0
   ]
-  if table:length weight_list_extra > 0 [
+  ifelse table:length weight_list_extra > 0 [
     let sum_v sum table:values weight_list_extra
     ifelse sum_v > 0 [
       foreach (table:keys weight_list_extra) [
@@ -449,13 +444,38 @@ to-report get_target [idp]
       table:put weight_values 2 0
       output-print (word "extra: " my_region " - " sum_v " - " (1 - my_liability))
     ]
-  ]
-  ifelse table:length weight_list != 0 [
-    let value rnd:weighted-one-of-list table:to-list weight_list [[t] -> last t]
-    table:put weight_values 0 item 0 value
   ] [
-    table:put weight_values 0 -1
+    table:put weight_values 2 0
   ]
+
+
+  ; randomly choose the hospital on the basis of the weights
+  ; solution 1
+;  ifelse table:length weight_list != 0 [
+;    let value rnd:weighted-one-of-list table:to-list weight_list [[t] -> last t]
+;    table:put weight_values 0 item 0 value
+;  ] [
+;    table:put weight_values 0 -2
+;  ]
+
+  ; alternative 2
+
+  ifelse table:length weight_list != 0 [
+    let pairs table:make
+    table:put pairs "intra" table:get weight_values 1
+    table:put pairs "inter" table:get weight_values 2
+    let stay first rnd:weighted-one-of-list table:to-list pairs [ [p] -> last p ]
+    ifelse (stay = "intra") [
+      let value rnd:weighted-one-of-list table:to-list weight_list_intra [[t] -> last t]
+      table:put weight_values 0 item 0 value
+    ] [
+      let value rnd:weighted-one-of-list table:to-list weight_list_extra [[t] -> last t]
+      table:put weight_values 0 item 0 value
+    ]
+  ] [
+    table:put weight_values 0 -2
+  ]
+
   ; the variable reported by this function contains 3 information:
   ; place 0) the hospital code where the patient are cared
   ; place 1) the total amount of intra-regional probability
@@ -507,7 +527,7 @@ end
 
 ; for each municipality calculates the quality metrics on the basis of the gravity model (availability of intra- and extra-regional resources weighted by distance)
 to compute_quality_measures
-  ;file-open "output/municipality_table_quality_measures.csv"
+  ; file-open "output/municipality_table_quality_measures.csv"
   let municipalities table:keys municipality_table
   ; for each municipality
   foreach municipalities [
@@ -544,9 +564,6 @@ to compute_quality_measures
           let h_n_return table:get info "n_return"
           let h_Rj table:get info "Rj"
           let h_beds table:get info "beds"
-
-          ;output-print (word key " - " h_beds " - " h_intervention)
-
           let h_int_per_bed 0
           if h_beds > 0 [
             set h_int_per_bed h_intervention / h_beds
@@ -607,40 +624,72 @@ to compute_quality_measures
 
     table:put municipality_table my_id_municipality municipality_info
     ; id|reg|prov|pop|north|inc|edu|int_intra|int_extra|ret_intra|ret_extra|clos_intra|clos_extra|bed_intra|bed_extra
-    ;file-print (word my_id_municipality "|" my_region "|" my_province "|" my_population "|" my_interventions_intra "|" my_interventions_extra "|" my_return_intra_ratio "|" my_return_extra_ratio "|" my_beds_intra "|" my_beds_extra)
+    ; file-print (word my_id_municipality "|" my_region "|" my_province "|" my_population "|" my_interventions_intra "|" my_interventions_extra "|" my_return_intra_ratio "|" my_return_extra_ratio "|" my_beds_intra "|" my_beds_extra)
   ]
-  ;file-close
+  ; file-close
 end
 ; END COMPUTE QUALITY MEASURES
 
-; colors each region depending on the mobility index
+; colors each province depending on the mobility index
 to polygon_color
+  let num1 0
+  let sum_x 0
+  let sum_y 0
+  let den1 0
+  let den2 0
+
   foreach table:keys comulative_data [
     key -> let info table:get comulative_data key
     let intra table:get info "intra"
     let extra table:get info "extra"
-    let mobility extra / (intra + extra)
-    ;print (word key " = " (mobility * 100))
+
+    let mobility_passive extra / (intra + extra)
+    let passive table:get table:get province_table key "passive"
+
+    set num1 (num1 + mobility_passive * passive)
+    set sum_x (sum_x + mobility_passive)
+    set sum_y (sum_y + passive)
+    set den1 (den1 + mobility_passive * mobility_passive)
+    set den2 (den2 + passive * passive)
+
     let poly gis:find-features italy-dataset "dc_provinc" key
-    gis:set-drawing-color black
-    if mobility < 0.5 [gis:set-drawing-color red]
-    if mobility < 0.4 [gis:set-drawing-color orange]
-    if mobility < 0.3 [gis:set-drawing-color yellow]
-    if mobility < 0.2 [gis:set-drawing-color green]
-    if mobility < 0.1 [gis:set-drawing-color sky]
+    gis:set-drawing-color black + 10
+    if mobility_passive < 0.50 [gis:set-drawing-color black + 11]
+    if mobility_passive < 0.45 [gis:set-drawing-color black + 12]
+    if mobility_passive < 0.40 [gis:set-drawing-color black + 13]
+    if mobility_passive < 0.35 [gis:set-drawing-color black + 14]
+    if mobility_passive < 0.30 [gis:set-drawing-color black + 15]
+    if mobility_passive < 0.25 [gis:set-drawing-color black + 16]
+    if mobility_passive < 0.20 [gis:set-drawing-color black + 17]
+    if mobility_passive < 0.15 [gis:set-drawing-color black + 18]
+    if mobility_passive < 0.10 [gis:set-drawing-color black + 19]
+    if mobility_passive < 0.05 [gis:set-drawing-color white]
     foreach poly [
       munic -> gis:fill munic 2.0
     ]
   ]
+
+  ; compute the regression coefficient
+  let n_provinces table:length comulative_data
+  set num1 num1 * n_provinces
+  let num2 sum_x * sum_y
+  let num num1 - num2
+  set den1 ((n_provinces * den1) - (sum_x * sum_x))
+  set den2 ((n_provinces * den2) - (sum_y * sum_y))
+  let den den1 * den2
+  set r_passive (num / sqrt(den))
+
+  output-print (word "r_passive - " (round (r_passive * 100)) " " num1 " " num2 " " den1 " " den2)
+  output-print (word "capacity end: " sum [capacity] of houses)
 end
 ; END POLYGON_COLOR
 
 ; compute the number of patients cared in their region or outside their region
 ; the information are stored in the cumulative_data table to be used for updating the map with colors
-to update_counter[my_province my_region my_target_region]
-  let intra 0
-  let extra 0
+to update_counter[my_province my_region my_target_region my_target_province]
   let info table:make
+  let target_info table:make
+
   ifelse table:has-key? comulative_data my_province [
     set info table:get comulative_data my_province
   ] [
@@ -652,41 +701,13 @@ to update_counter[my_province my_region my_target_region]
   ] [
     table:put info "extra" table:get info "extra" + 1
   ]
+
   table:put comulative_data my_province info
 end
 ; END UPDATE_COUNTER
 
 to test
-
-  set_environment
-  loop [
-    ifelse (n_ticks > ticks) [ go ] [ stop ]
-  ]
-
-
-  ;setup
-  ;load_gis
-  ;load_data
-  ;load_population
-  ;go
-
-  ;output-print province_table
-
-  ;output-print table:keys distance_table
-  ;let distances table:get distance_table 77014
-  ;output-print standard-deviation table:values distances
-  ;compute_quality_measures
-
-;  set update_capacity false
-;  set random_queue false
-;  set_environment
-;  go
-;
-;
-;  set update_capacity true
-;  set random_queue false
-;  set_environment
-;  go
+  place_hosps
 
 
 end
@@ -831,14 +852,14 @@ INPUTBOX
 189
 242
 n_ticks
-3.0
+52.0
 1
 0
 Number
 
 OUTPUT
 1122
-16
+51
 1869
 363
 11
@@ -861,16 +882,6 @@ NIL
 1
 
 TEXTBOX
-828
-160
-978
-244
-mobility > 0.5 grey\nmobility < 0.5 red\nmobility < 0.4 orange\nmobility < 0.3 yellow\nmobility < 0.2 green\nmobility < 0.1 sky
-11
-0.0
-1
-
-TEXTBOX
 191
 10
 341
@@ -881,10 +892,10 @@ Set_environment performs the:\n- setup\n- load_gis\n- load_data\n- load_populati
 1
 
 BUTTON
-1307
-484
-1370
-517
+1121
+11
+1184
+44
 NIL
 test
 NIL
@@ -939,6 +950,24 @@ manage_capacity
 0
 1
 -1000
+
+PLOT
+14
+551
+315
+701
+Correlation b/w expected & simulated mobility
+# ticks
+R-squared
+0.0
+52.0
+0.0
+1.0
+true
+false
+"plotxy ticks r_passive" "plotxy ticks r_passive"
+PENS
+"default" 1.0 0 -13840069 false "plotxy ticks r_passive" "plotxy ticks r_passive"
 
 @#$#@#$#@
 ## WHAT IS IT?
