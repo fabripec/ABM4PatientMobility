@@ -1,10 +1,7 @@
-PRO_COM,region,province,COMUNE,POP_2011,return,intervention,Rj,n_return,north,beds,intervention_old,beds_old,return_old
-76039,Basilicata,Potenza,Lagonegro,5725,0.000,95,0.103349031,0,0,13,63,11.99999984,0.000
-76046,Basilicata,Potenza,Marsicovetere,5341,0.000,59,0.157345544,0,0,18,39,15.99999998,0.000
-76048,Basilicata,Potenza,Melfi,17425,0.000,72,0.084394746,0,0,14,48,12.99999973,0.000
-76063,Basilicata,Potenza,Potenza,66777,0.000,284,0.077998047,0,0,44,189,40.00000026,0.000
-77014,Basilicata,Matera,Matera,59796,0.230,176,0.131265282,125,0,30,117,26.99999994,0.460
-77021,Basilicata,Matera,Policoro,15976,0.420,117,0.156612931,71,0,0,78,0,0.860
-32006,Friuli Venezia Giulia,Trieste,Trieste,202123,0.250,731,0.148601952,238,1,107,487,96.99999979,0.250
-93033,Friuli Venezia Giulia,Pordenone,Pordenone,50583,0.484,740,0.064829259,410,1,71,493,64.99999982,0.969
-93041,Friuli Venezia Giulia,Pordenone,San Vito al Tagliamento,15011,0.000,288,0.069124711,0,1,30,192,26.99999994,0.000
+PRO_COM,region,province,COMUNE,POP_2011,return,intervention,Rj,n_return,north,beds,intervention_old,beds_old,return_old,position,n_return_old
+76039,Basilicata,Potenza,Lagonegro,5725,0,95,0.103349031,0,0,18,63,12,0,0,0
+76046,Basilicata,Potenza,Marsicovetere,5341,0,59,0.157345544,0,0,24,39,16,0,0,0
+76048,Basilicata,Potenza,Melfi,17425,0,72,0.084394746,0,0,20,48,13,0,0,0
+76063,Basilicata,Potenza,Potenza,66777,0,284,0.077998047,0,0,60,189,40,0,0,0
+77014,Basilicata,Matera,Matera,59796,0.46,176,0.131265282,125,0,41,117,27,0.46,0,125
+77021,Basilicata,Matera,Policoro,15976,0.86,117,0.156612931,71,0,0,78,0,0.86,0,71
