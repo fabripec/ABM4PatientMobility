@@ -760,12 +760,7 @@ end
 
 ; this function is executed when the button test is pressed and is adopted to test functions and istructions
 to test
-  set fileName (word "output/output-" date-and-time)
-  set fileName remove " " fileName
-  set fileName remove "." fileName
-  set fileName remove ":" fileName
-  set fileName (word fileName ".csv")
-  output-print fileName
+
 end
 
 to-report sum_column[table]
@@ -915,7 +910,7 @@ SWITCH
 281
 random_queue
 random_queue
-1
+0
 1
 -1000
 
@@ -1006,47 +1001,74 @@ INPUTBOX
 1277
 439
 sessions
-0.0
+2.0
 1
 0
 Number
 
 @#$#@#$#@
 ## WHAT IS IT?
+This model makes it possible to reproduce some dynamics connected to the so-called patient mobility. The patient mobility is the migration of patients to access to health services located outside his/her region of residence. It is considered as a proxy to appraise the quality and availability of hospi-tal services and to point out socio-economic disparities at local and regional level. We simulate patient flow across regions and determining which are the main factors influencing it, using some database:
 
-(a general understanding of what the model is trying to show or explain)
+italy-dataset: GIS dataset representing the shapefile
+
+distance_table: stores the municipality-to-hospital distances
+
+municipality_table: stores all the information needed to describe the municipality
+
+population_table: lists of patients (and relevant information) to be involved in the simulation as extracted from the whole population
+
+comulative_data: it contains, for each region, the number of patients that move or remain in their region of residence to access the service
 
 ## HOW IT WORKS
 
-(what rules the agents use to create the overall behavior of the model)
+The model t is based on the Accessibility Index which adopts the gravity model to determine the probability that a patient accesses to a hospital based on hospital’s capacity (e.g., number of beds, number of interventions performed) and (travel) distance. We can read the mathematical details in
+ https://docs.google.com/document/d/1RR4rSrHsQZAT1sjvGJrBO1hyz-CJdmw8/edit?usp=sharing&ouid=115021490414348004982&rtpof=true&sd=true 
+
+We execute the simulation by placing the hospitals (it generally resets the capacity), placing the patients over the territory and moving the patients toward the hospital
+
+The first part of the process entails the initialization of the model environment and the loading of data:population, municipality and health system characteristics, distance table among municipalities; number of interventions the hospital can perform each week proportionally set considering the total number of interventions performed; starting week when the hospital can enroll patients based on its waiting time. 
+
+Each hospital has been represented by a agent described with the following variables: 1) unique identifier; 2) belonging region, province and municipality; 3) capacity and accessibility information (i.e. percentage of patients returned within two years from the intervention, number of beds and interventions); 4) additional quality information (i.e. waiting times, patient satisfaction). 
+
+The simulation is based on two calendar years each one divided in 52 weeks to simulate the access to care as a weekly procedure considering that the average length of stay for the pri-mary total hip replacement is around 7 days.
+
+For each week, 1000 patients are included in the analysis, each one characterized by his/her socio-economic, demo-graphic and territorial characteristics. Once a patient is extracted the next step entails the identification of the target hospital where the patient is going to be treated. This choice basically depends on the staying index (see Equation 5 in https://docs.google.com/document/d/1RR4rSrHsQZAT1sjvGJrBO1hyz-CJdmw8/edit?usp=sharing&ouid=115021490414348004982&rtpof=true&sd=true for details ), the availability of hospital beds and the waiting times needed to access to the first empty bed in each hospital.
+
+To determine the target hospital, the algorithm firstly captures whether the patient remains or not in his region of residence. This choice is performed generating a random number between 0 and 1, if it is lower than the staying index only intrare-gional hospitals will be selected, otherwise the algorithm will select only interregional hospitals.
+
+The second step entails the choice of the relevant hospital: each hospital has a probability to be chosen by the patient is proportional to the attractive index computed using Equation 5. Then the target hospital is extracted adopting a random weighted function.
+
+Finally, the patient moves toward the target hospital and the its residual capacity of the relevant week is reduced by 1. When the capacity of an hos-pital is lower than 0, it can accept patients only in the subsequent week. 
 
 ## HOW TO USE IT
 
-(how to use the model, including a description of each of the items in the Interface tab)
+In the interface we can load the database about data and population. We can setup the model by the SETUP button. To start the simulation, click on GO button The main result is plotted into the correlation plot beetween expected vs. simulated mobility. We can observe the dynamics of the mobility directly in the window showing the simulation environment. Also you can check the correlation between expected results and simulated results using the TEST button. The data is displayed using a polygon-based representation algorithm.
+
+We can set on/off these features:
+
+update_capacity: load the hospital updated information with provisional data on interventions, beds, etc.
+
+random_queue: select the population to be involved in the simulation randomly  
+
+manage_capacity: control whether hospitals saturate their capacity 
 
 ## THINGS TO NOTICE
 
-(suggested things for the user to notice while running the model)
+We presents a preliminary analysis of the applicability and robustness of this approach highlighting the suitability of the proposed ABM solution to describe this specific scenario with a very strong correlation between the simulated and the computed passive and active mobility. Patient flows resulted from the application of ABM have been subsequently analyzed to capture the level of inequalities present over the Italian territory at local, regional and national level.
 
-## THINGS TO TRY
+In fact, portions of the country or of specific regions with high mobility rate are associated with low quality and/or accessibility of services due to various reasons such as high waiting times, low patient satisfaction, limited number of beds, low number of interventions, high distance with the hospital.
 
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
+Pecoraro F, Accordino F, Cecconi F, Paolucci M. Agent Based Modelling for Simulating the Interregional Patient Mobility in Italy. Stud Health Technol Inform. 2023 May 18;302:297-301. doi: 10.3233/SHTI230122. PMID: 37203666.
 
-## EXTENDING THE MODEL
-
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
 
 ## NETLOGO FEATURES
-
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
-
-## RELATED MODELS
-
-(models in the NetLogo Models Library and elsewhere which are of related interest)
+We use GIS extension to manage geografical data
 
 ## CREDITS AND REFERENCES
 
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+Pecoraro F, Accordino F, Cecconi F, Paolucci M. Agent Based Modelling for Simulating the Interregional Patient Mobility in Italy. Stud Health Technol Inform. 2023 May 18;302:297-301. doi: 10.3233/SHTI230122. PMID: 37203666.
+
 @#$#@#$#@
 default
 true
